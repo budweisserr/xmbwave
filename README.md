@@ -21,6 +21,16 @@ whole loop idles.
 So, its primarly optimized for CPU which supports AVX2 instrustion set. 
 In case of AVX2 not being available - trust the compiler to optimize the code based on the supported instruction set (-march=native).
 
+## Screenshot
+
+![xmbwave wave and sparkles on black](screenshots/xmbwave-oled.png)
+
+Black background, grey ribbon, additive sparkles. That look is one command:
+
+```sh
+./build/xmbwave --set msaa=8 --set fps=60 --set gradientAngle=0 --set colorTop=0,0,0 --set colorBot=0,0,0 --set waveColor=1,1,1 --set detail=0.8 --set waveBody=0.14 --set amplitude=1.4 --set brightness=0.50 --set particles=500 --set particleOpacity=0.55 --set particleSize=3 --set particleSizeVar=6
+```
+
 ## What it does
 
 - Recreates the XMB wave with the RetroArch `pipeline_ribbon` displacement math
