@@ -1,0 +1,8 @@
+build/
+.cache/
+compile_commands.json
+*.o
+*.d
+docs/*.dis
+docs/*
+firmware/
