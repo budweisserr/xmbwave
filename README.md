@@ -125,3 +125,10 @@ without a window manager.
 ## AI
 
 Used AI to reverse engineer the PS3 firmware and write shaders for the wave and the particles (and write this README a little bit).
+
+## License
+
+GNU General Public License v3.0 or later - see [LICENSE](LICENSE).
+
+The wave and fresnel shaders are derived from RetroArch's `pipeline_ribbon`
+pair, via OpenXMB. Both are GPLv3, which is what fixes the licence here.
