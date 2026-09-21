@@ -100,6 +100,8 @@ class Desktop {
 
  private:
   bool createContext(const XVisualInfo* visual, std::string* error);
+  bool createSurface(int monitorIndex, std::string* error);
+  void reconcileSurfaces();
   void applyMonitorLayout();
   void setDesktopWindowHints(Window window) const;
   bool windowIsFullscreen(Window window) const;
@@ -111,6 +113,7 @@ class Desktop {
   int screen_ = 0;
   GLXContext context_ = nullptr;
   XVisualInfo* visual_ = nullptr;
+  Colormap colormap_ = 0;
 
   std::vector<Monitor> monitors_;
   std::vector<Surface> surfaces_;

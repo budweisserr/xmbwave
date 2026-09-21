@@ -120,48 +120,92 @@ bool Desktop::createWindows(std::string* error) {
   }
   visual_ = visual;
 
-  const Colormap colormap =
-      XCreateColormap(dpy_, root_, visual->visual, AllocNone);
-  if (!colormap) {
+  colormap_ = XCreateColormap(dpy_, root_, visual->visual, AllocNone);
+  if (!colormap_) {
     *error = "XCreateColormap failed";
     return false;
   }
 
   for (const Monitor& monitor : monitors_) {
-    XSetWindowAttributes attrs;
-    std::memset(&attrs, 0, sizeof(attrs));
-    attrs.colormap = colormap;
-    attrs.background_pixel = 0;
-    attrs.override_redirect = True;
-    attrs.event_mask = 0;
-
-    const Window window = XCreateWindow(
-        dpy_, root_, monitor.rect.x, monitor.rect.y,
-        (unsigned int)monitor.rect.w, (unsigned int)monitor.rect.h, 0,
-        visual->depth, InputOutput, visual->visual,
-        CWColormap | CWBackPixel | CWOverrideRedirect | CWEventMask, &attrs);
-    if (!window) {
-      *error = "XCreateWindow failed";
+    if (!createSurface(monitor.index, error))
       return false;
-    }
-
-    setDesktopWindowHints(window);
-    XMapWindow(dpy_, window);
-    XLowerWindow(dpy_, window);
-    // Empty input region: pointer and keyboard events fall through to the
-    // root window, so the wallpaper never steals clicks from the WM.
-    XShapeCombineRectangles(dpy_, window, ShapeInput, 0, 0, nullptr, 0,
-                            ShapeSet, Unsorted);
-
-    Surface surface;
-    surface.monitorIndex = monitor.index;
-    surface.window = window;
-    surface.rect = monitor.rect;
-    surfaces_.push_back(surface);
   }
 
   XSync(dpy_, False);
   return true;
+}
+
+// One desktop window for one monitor, on the visual the GL context was made for.
+bool Desktop::createSurface(int monitorIndex, std::string* error) {
+  if (monitorIndex < 0 || monitorIndex >= (int)monitors_.size()) {
+    *error = "monitor index out of range";
+    return false;
+  }
+  const Monitor& monitor = monitors_[(size_t)monitorIndex];
+
+  XSetWindowAttributes attrs;
+  std::memset(&attrs, 0, sizeof(attrs));
+  attrs.colormap = colormap_;
+  attrs.background_pixel = 0;
+  attrs.override_redirect = True;
+  attrs.event_mask = 0;
+
+  const Window window = XCreateWindow(
+      dpy_, root_, monitor.rect.x, monitor.rect.y, (unsigned int)monitor.rect.w,
+      (unsigned int)monitor.rect.h, 0, visual_->depth, InputOutput,
+      visual_->visual,
+      CWColormap | CWBackPixel | CWOverrideRedirect | CWEventMask, &attrs);
+  if (!window) {
+    *error = "XCreateWindow failed";
+    return false;
+  }
+
+  setDesktopWindowHints(window);
+  XMapWindow(dpy_, window);
+  XLowerWindow(dpy_, window);
+  // Empty input region: clicks fall through to the root window.
+  XShapeCombineRectangles(dpy_, window, ShapeInput, 0, 0, nullptr, 0, ShapeSet,
+                          Unsorted);
+
+  Surface surface;
+  surface.monitorIndex = monitor.index;
+  surface.window = window;
+  surface.rect = monitor.rect;
+  surfaces_.push_back(surface);
+  return true;
+}
+
+// Match the window set to the monitor list after a hotplug.
+void Desktop::reconcileSurfaces() {
+  if (!visual_)
+    return;
+
+  for (size_t i = surfaces_.size(); i-- > 0;) {
+    const int index = surfaces_[i].monitorIndex;
+    if (index < 0 || index >= (int)monitors_.size()) {
+      XMB_LOG_INFO("monitor {} gone, dropping its window", index);
+      if (surfaces_[i].window)
+        XDestroyWindow(dpy_, surfaces_[i].window);
+      surfaces_.erase(surfaces_.begin() + (long)i);
+    }
+  }
+
+  std::vector<bool> covered(monitors_.size(), false);
+  for (const Surface& surface : surfaces_) {
+    if (surface.monitorIndex >= 0 && surface.monitorIndex < (int)covered.size())
+      covered[(size_t)surface.monitorIndex] = true;
+  }
+
+  for (const Monitor& monitor : monitors_) {
+    if (covered[(size_t)monitor.index])
+      continue;
+    std::string error;
+    if (createSurface(monitor.index, &error))
+      XMB_LOG_INFO("monitor {} appeared, created its window", monitor.index);
+    else
+      XMB_LOG_WARN("monitor {}: {}", monitor.index, error);
+  }
+  XFlush(dpy_);
 }
 
 void Desktop::setDesktopWindowHints(Window window) const {
@@ -240,8 +284,10 @@ bool Desktop::refreshMonitors() {
   }
 
   monitors_ = std::move(next);
-  if (changed && !surfaces_.empty())
+  if (changed) {
+    reconcileSurfaces();
     applyMonitorLayout();
+  }
   return changed;
 }
 
